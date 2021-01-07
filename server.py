@@ -1,28 +1,48 @@
 import socket
-import time
+import tqdm
+import os
 
+# device's IP address
+SERVER_HOST = "0.0.0.0"
+SERVER_PORT = 5001
+# receive 4096 bytes each time
+BUFFER_SIZE = 4096
+SEPARATOR = "<SEPARATOR>"
 
-HEADERSIZE = 10
+# TCP socket
+s = socket.socket()
+# bind the socket to our local address
+s.bind((SERVER_HOST, SERVER_PORT))
 
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind((socket.gethostname(), 1243))
 s.listen(5)
+print(f"[*] Listening as {SERVER_HOST}:{SERVER_PORT}")
 
-while True:
-    # now our endpoint knows about the OTHER endpoint.
-    clientsocket, address = s.accept()
-    print(f"Connection from {address} has been established.")
+# accept connection if there is any
+client_socket, address = s.accept()
+print(f"[+] {address} is connected.")
 
-    msg = "Welcome to the server!"
-    msg = f"{len(msg):<{HEADERSIZE}}"+msg
+# receive the file infos
+# receive using client socket, not server socket
+received = client_socket.recv(BUFFER_SIZE).decode()
+filename, filesize = received.split(SEPARATOR)
+# remove absolute path if there is
+filename = os.path.basename(filename)
+# convert to integer
+filesize = int(filesize)
 
-    clientsocket.send(bytes(msg,"utf-8"))
+# start receiving the file from the socket
+# and writing to the file stream
+progress = tqdm.tqdm(range(filesize), f"Receiving {filename}", unit="B", unit_scale=True, unit_divisor=1024)
+with open(filename, "wb") as f:
+    for _ in progress:
+        # read 1024 bytes from the socket (receive)
+        bytes_read = client_socket.recv(BUFFER_SIZE)
+        if not bytes_read:    
+            # nothing is received
+            # file transmitting is done
+            break
+        # write to the file the bytes we just received
+        f.write(bytes_read)
+        # update the progress bar
+        progress.update(len(bytes_read))
 
-    while True:
-        time.sleep(3)
-        msg = f"The time is {time.time()}"
-        msg = f"{len(msg):<{HEADERSIZE}}"+msg
-
-        print(msg)
-
-        clientsocket.send(bytes(msg,"utf-8"))
